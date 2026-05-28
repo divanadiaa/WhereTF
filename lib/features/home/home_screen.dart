@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
-import '../circle/create_circle_screen.dart';
+import '../../data/models/circle_summary.dart';
+import '../../state/session_controller.dart';
 import '../circle/join_circle_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,31 +21,40 @@ class _HomeScreenState extends State<HomeScreen> {
   final Color darkBrown = const Color(0xFF5B4D41);
   final Color lightCream = const Color(0xFFF7F2EB);
   final Color backgroundCream = const Color(0xFFFAF4ED);
-  final Color cardCream = const Color(0xFFF2E8DB);
   final Color textLight = const Color(0xFF9E8E78);
 
   final LatLng defaultCenter = const LatLng(-6.2088, 106.8456);
 
-  void _goToCreateCircle() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CreateCircleScreen(),
+  void _showCreateUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Create circle belum tersedia di backend.'),
       ),
     );
   }
 
-  void _goToJoinCircle() {
-    Navigator.push(
+  Future<void> _goToJoinCircle() async {
+    final message = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (_) => const JoinCircleScreen(),
       ),
     );
+
+    if (!mounted || message == null || message.isEmpty) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    final currentCircle = session.currentCircle;
+
     return Scaffold(
       backgroundColor: backgroundCream,
       body: Stack(
@@ -112,9 +123,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 22),
-                    _buildEmptyCircleCard(),
+                    currentCircle == null
+                        ? _buildEmptyCircleCard()
+                        : _buildCurrentCircleCard(currentCircle),
                     const SizedBox(height: 22),
-                    _buildYourCirclesSection(),
+                    _buildActiveCircleSection(currentCircle),
                   ],
                 ),
               );
@@ -126,6 +139,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTopBar() {
+    final session = context.watch<SessionController>();
+    final user = session.currentUser;
+    final currentCircle = session.currentCircle;
+
     return Container(
       height: 58,
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -143,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         children: [
           Text(
-            'No Circle Yet',
+            currentCircle?.displayName ?? 'No Circle Yet',
             style: GoogleFonts.inter(
               color: darkBrown,
               fontWeight: FontWeight.w700,
@@ -167,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
             radius: 17,
             backgroundColor: const Color(0xFFCDA87C),
             child: Text(
-              'JD',
+              user?.initials ?? '?',
               style: GoogleFonts.inter(
                 color: darkBrown,
                 fontSize: 12,
@@ -275,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _goToCreateCircle,
+              onPressed: _showCreateUnavailable,
               style: ElevatedButton.styleFrom(
                 backgroundColor: darkBrown,
                 foregroundColor: Colors.white,
@@ -310,6 +327,72 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildCurrentCircleCard(CircleSummary currentCircle) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 22, 18, 20),
+      decoration: BoxDecoration(
+        color: lightCream,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            currentCircle.displayName,
+            style: GoogleFonts.inter(
+              color: darkBrown,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Invite code: ${currentCircle.referalCode}',
+            style: GoogleFonts.inter(
+              color: textLight,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            currentCircle.isOwnedBy(
+              context.read<SessionController>().currentUser?.id,
+            )
+                ? 'This is your default circle.'
+                : "You are active in another member's circle.",
+            style: GoogleFonts.inter(
+              color: textLight,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _goToJoinCircle,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: darkBrown,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                'Join another circle',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _smallEmptyAvatar() {
     return Container(
       width: 22,
@@ -325,43 +408,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildYourCirclesSection() {
+  Widget _buildActiveCircleSection(CircleSummary? currentCircle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'Your Circles',
-              style: GoogleFonts.inter(
-                color: darkBrown,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const Spacer(),
-            GestureDetector(
-              onTap: _goToCreateCircle,
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: cardCream,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.add,
-                  color: darkBrown,
-                  size: 20,
-                ),
-              ),
-            ),
-          ],
+        Text(
+          'Active Circle',
+          style: GoogleFonts.inter(
+            color: darkBrown,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 18),
         Container(
           width: double.infinity,
-          height: 78,
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(14),
@@ -370,17 +432,39 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 1,
             ),
           ),
-          child: Center(
-            child: Text(
-              'No circles yet',
-              style: GoogleFonts.inter(
-                color: const Color(0xFFC2B3A4),
-                fontSize: 13,
-              ),
+          child: _buildActiveCircleContent(currentCircle),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActiveCircleContent(CircleSummary? currentCircle) {
+    if (currentCircle == null) {
+      return SizedBox(
+        height: 50,
+        child: Center(
+          child: Text(
+            'No synced circle yet',
+            style: GoogleFonts.inter(
+              color: const Color(0xFFC2B3A4),
+              fontSize: 13,
             ),
           ),
         ),
-      ],
+      );
+    }
+
+    return SizedBox(
+      height: 50,
+      child: Center(
+        child: Text(
+          '${currentCircle.displayName} - ${currentCircle.referalCode}',
+          style: GoogleFonts.inter(
+            color: const Color(0xFFC2B3A4),
+            fontSize: 13,
+          ),
+        ),
+      ),
     );
   }
 }

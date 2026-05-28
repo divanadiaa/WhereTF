@@ -1,5 +1,10 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+
+import '../../data/services/api_client.dart';
+import '../../state/session_controller.dart';
 
 class JoinCircleScreen extends StatefulWidget {
   const JoinCircleScreen({super.key});
@@ -18,32 +23,76 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
   final Color gold = const Color(0xFFD8B36A);
 
   @override
+  void initState() {
+    super.initState();
+    inviteCodeController.addListener(_normalizeInviteCodeInput);
+  }
+
+  @override
   void dispose() {
+    inviteCodeController.removeListener(_normalizeInviteCodeInput);
     inviteCodeController.dispose();
     super.dispose();
   }
 
-  void joinCircle() {
-    final code = inviteCodeController.text.trim();
+  void _normalizeInviteCodeInput() {
+    final normalized = inviteCodeController.text
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
 
-    if (code.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invite code cannot be empty'),
-        ),
-      );
+    final limited = normalized.length > 5
+        ? normalized.substring(0, 5)
+        : normalized;
+
+    if (inviteCodeController.text == limited) {
       return;
     }
 
+    inviteCodeController.value = TextEditingValue(
+      text: limited,
+      selection: TextSelection.collapsed(offset: limited.length),
+    );
+  }
+
+  Future<void> joinCircle() async {
+    final code = inviteCodeController.text.trim();
+    final session = context.read<SessionController>();
+
+    if (code.isEmpty) {
+      _showMessage('Invite code wajib diisi.');
+      return;
+    }
+
+    if (code.length != 5) {
+      _showMessage('Invite code harus tepat 5 karakter.');
+      return;
+    }
+
+    try {
+      final message = await session.joinCircle(code);
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(context, message);
+    } on ApiValidationException catch (e) {
+      _showMessage(e.message);
+    } on ApiException catch (e) {
+      _showMessage(e.message);
+    }
+  }
+
+  void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Join circle with code: $code'),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    final isLoading = session.isUpdatingCircle;
+
     return Scaffold(
       backgroundColor: bgCream,
       appBar: AppBar(
@@ -143,8 +192,12 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
 
             TextField(
               controller: inviteCodeController,
+              maxLength: 5,
               textAlign: TextAlign.center,
               textCapitalization: TextCapitalization.characters,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+              ],
               style: GoogleFonts.inter(
                 color: darkBrown,
                 fontSize: 22,
@@ -152,7 +205,8 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
                 letterSpacing: 5,
               ),
               decoration: InputDecoration(
-                hintText: 'FIND-XXXX',
+                counterText: '',
+                hintText: 'ABCDE',
                 hintStyle: GoogleFonts.inter(
                   color: textLight.withOpacity(0.65),
                   fontSize: 22,
@@ -197,7 +251,7 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: joinCircle,
+                onPressed: isLoading ? null : joinCircle,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: darkBrown,
                   elevation: 0,
@@ -206,7 +260,7 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
                   ),
                 ),
                 child: Text(
-                  'Join Circle',
+                  isLoading ? 'Joining...' : 'Join Circle',
                   style: GoogleFonts.inter(
                     color: Colors.white,
                     fontSize: 14,

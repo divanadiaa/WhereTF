@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import 'package:wheretf/core/widgets/custom_widgets.dart';
+import 'package:wheretf/data/services/api_client.dart';
 import 'package:wheretf/features/main/main_navigation_screen.dart';
+import 'package:wheretf/state/session_controller.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool isLoginMode;
@@ -18,7 +21,6 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   late bool isLogin;
-  bool _isLoading = false;
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -50,32 +52,84 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submitAuth() async {
-    setState(() {
-      _isLoading = true;
-    });
+    final session = context.read<SessionController>();
+    final validationError = _validateInputs();
+    if (validationError != null) {
+      _showMessage(validationError);
+      return;
+    }
 
-    await Future.delayed(const Duration(milliseconds: 400));
+    try {
+      if (isLogin) {
+        await session.login(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+      } else {
+        await session.register(
+          _nameController.text.trim(),
+          _emailController.text.trim(),
+          _passwordController.text,
+          _confirmPasswordController.text,
+          _phoneController.text.trim(),
+        );
+      }
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const MainNavigationScreen(),
-      ),
-    );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainNavigationScreen(),
+        ),
+        (route) => false,
+      );
+    } on ApiValidationException catch (e) {
+      _showMessage(e.message);
+    } on ApiException catch (e) {
+      _showMessage(e.message);
+    } catch (e) {
+      _showMessage('Register/Login gagal: $e');
+    }
   }
 
   Future<void> _handleGoogleSignIn() async {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const MainNavigationScreen(),
-      ),
+    _showMessage('Google Sign In belum diintegrasikan.');
+  }
+
+  String? _validateInputs() {
+    if (_emailController.text.trim().isEmpty) {
+      return 'Email wajib diisi.';
+    }
+
+    if (_passwordController.text.isEmpty) {
+      return 'Password wajib diisi.';
+    }
+
+    if (!isLogin) {
+      if (_nameController.text.trim().isEmpty) {
+        return 'Nama wajib diisi.';
+      }
+
+      if (_phoneController.text.trim().isEmpty) {
+        return 'Nomor telepon wajib diisi.';
+      }
+
+      if (_confirmPasswordController.text.isEmpty) {
+        return 'Konfirmasi password wajib diisi.';
+      }
+
+      if (_passwordController.text != _confirmPasswordController.text) {
+        return 'Password dan konfirmasi password tidak sama.';
+      }
+    }
+
+    return null;
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -97,6 +151,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    final isLoading = session.isAuthenticating;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: SingleChildScrollView(
@@ -311,7 +368,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 20),
                   ],
 
-                  _isLoading
+                  isLoading
                       ? const Center(
                           child: CircularProgressIndicator(),
                         )
@@ -319,7 +376,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           width: double.infinity,
                           height: 54,
                           child: ElevatedButton(
-                            onPressed: _submitAuth,
+                            onPressed: isLoading ? null : _submitAuth,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryColor,
                               foregroundColor: Colors.white,
@@ -368,7 +425,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _isLoading ? null : _handleGoogleSignIn,
+                          onPressed: isLoading ? null : _handleGoogleSignIn,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: const BorderSide(color: primaryLight),
@@ -395,7 +452,13 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(width: 16),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _isLoading ? null : () {},
+                          onPressed: isLoading
+                              ? null
+                              : () {
+                                  _showMessage(
+                                    'Apple Sign In belum diintegrasikan.',
+                                  );
+                                },
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: const BorderSide(color: primaryLight),
@@ -463,23 +526,30 @@ class _AuthScreenState extends State<AuthScreen> {
                   if (!isLogin) ...[
                     const SizedBox(height: 16),
                     Center(
-                      child: Text.rich(
-                        TextSpan(
-                          text: 'Already have an account? ',
-                          style: _font(
-                            size: 14,
-                            color: textLight,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Log In',
-                              style: _font(
-                                size: 14,
-                                weight: FontWeight.w700,
-                                color: textDark,
-                              ),
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            isLogin = true;
+                          });
+                        },
+                        child: Text.rich(
+                          TextSpan(
+                            text: 'Already have an account? ',
+                            style: _font(
+                              size: 14,
+                              color: textLight,
                             ),
-                          ],
+                            children: [
+                              TextSpan(
+                                text: 'Log In',
+                                style: _font(
+                                  size: 14,
+                                  weight: FontWeight.w700,
+                                  color: textDark,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

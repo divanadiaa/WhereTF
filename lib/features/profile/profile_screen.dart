@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
+import '../../state/session_controller.dart';
 import '../premium/premium_screen.dart';
+import '../landing/welcome_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -17,7 +20,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final Color gold = const Color(0xFFD8B36A);
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SessionController>().refreshSubscription(allowFailure: true);
+    });
+  }
+
+  Future<void> _handleLogout() async {
+    final session = context.read<SessionController>();
+
+    await session.logout();
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const WelcomeScreen(),
+      ),
+      (route) => false,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    if (!session.isLoggedIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _redirectToLogin();
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: bgCream,
       body: Column(
@@ -56,13 +94,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   Center(
                     child: TextButton(
-                      onPressed: () {
-                        _showBottomMessage(
-                          'Logged out successfully',
-                        );
-                      },
+                      onPressed: session.isAuthenticating ? null : _handleLogout,
                       child: Text(
-                        'Log Out',
+                        session.isAuthenticating ? 'Logging Out...' : 'Log Out',
                         style: GoogleFonts.inter(
                           color: Colors.redAccent,
                           fontSize: 13,
@@ -82,6 +116,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildHeader() {
+    final user = context.watch<SessionController>().currentUser;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
@@ -112,7 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor:
                 const Color(0xFFE1C9A8),
             child: Text(
-              'P',
+              user?.initials ?? 'P',
               style: GoogleFonts.inter(
                 color: darkBrown,
                 fontSize: 28,
@@ -124,7 +160,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 10),
 
           Text(
-            'Pelangi',
+            user?.name ?? 'Guest',
             style: GoogleFonts.inter(
               color: Colors.white,
               fontSize: 18,
@@ -135,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 3),
 
           Text(
-            'pelangi@email.com',
+            user?.email ?? 'guest@example.com',
             style: GoogleFonts.inter(
               color:
                   Colors.white.withOpacity(0.72),
@@ -266,6 +302,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildPremiumCard() {
+    final session = context.watch<SessionController>();
+    final subscription = session.subscription;
+    final isPremium = subscription?.isPremium ?? false;
+    final hasPendingPayment = subscription?.pendingPayment != null;
+    final title = isPremium
+        ? 'Premium Active'
+        : hasPendingPayment
+            ? 'Payment Pending'
+            : 'whereTF Premium';
+    final subtitle = isPremium
+        ? '7-day location history unlocked'
+        : hasPendingPayment
+            ? 'Continue or cancel your premium payment'
+            : 'Unlock 7-day location history';
+    final badgeColor = isPremium || hasPendingPayment ? gold : bgCream;
+    final iconColor = isPremium || hasPendingPayment ? darkBrown : gold;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -288,11 +341,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CircleAvatar(
               radius: 22,
               backgroundColor:
-                  gold.withOpacity(0.18),
+                  badgeColor.withOpacity(0.22),
               child: Icon(
                 Icons
                     .workspace_premium_rounded,
-                color: gold,
+                color: iconColor,
                 size: 24,
               ),
             ),
@@ -305,7 +358,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'whereTF Premium',
+                    title,
                     style: GoogleFonts.inter(
                       color: Colors.white,
                       fontSize: 15,
@@ -317,7 +370,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 4),
 
                   Text(
-                    'Unlock 7-day location history',
+                    session.isLoadingSubscription
+                        ? 'Checking subscription status...'
+                        : subtitle,
                     style: GoogleFonts.inter(
                       color: Colors.white
                           .withOpacity(0.72),
@@ -535,6 +590,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _redirectToLogin() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const WelcomeScreen(),
+      ),
+      (route) => false,
     );
   }
 }

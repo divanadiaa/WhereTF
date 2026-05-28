@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
-import 'create_circle_screen.dart';
+import '../../data/models/circle_summary.dart';
+import '../../data/services/api_client.dart';
+import '../../state/session_controller.dart';
 import 'join_circle_screen.dart';
 
 class CircleScreen extends StatelessWidget {
@@ -13,6 +16,8 @@ class CircleScreen extends StatelessWidget {
     final Color backgroundCream = const Color(0xFFFAE8D2);
     final Color lightCream = const Color(0xFFFFF7ED);
     final Color textLight = const Color(0xFF9E8E78);
+    final session = context.watch<SessionController>();
+    final currentCircle = session.currentCircle;
 
     return Scaffold(
       backgroundColor: backgroundCream,
@@ -30,23 +35,27 @@ class CircleScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 28),
 
-              _buildSearchBox(textLight),
-
-              const Spacer(),
-
-              _buildEmptyState(
-                backgroundCream: backgroundCream,
-                lightCream: lightCream,
-                textLight: textLight,
+              Expanded(
+                child: currentCircle == null
+                    ? _buildEmptyState(
+                        backgroundCream: backgroundCream,
+                        lightCream: lightCream,
+                        textLight: textLight,
+                      )
+                    : _buildCurrentCircleState(
+                        context: context,
+                        currentCircle: currentCircle,
+                        lightCream: lightCream,
+                        textLight: textLight,
+                      ),
               ),
-
-              const Spacer(),
 
               _buildActionButtons(
                 context: context,
                 darkBrown: darkBrown,
+                session: session,
               ),
             ],
           ),
@@ -55,32 +64,50 @@ class CircleScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSearchBox(Color textLight) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4E5D5),
-        borderRadius: BorderRadius.circular(18),
+  Future<void> _openJoinCircle(BuildContext context) async {
+    final message = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const JoinCircleScreen(),
       ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.search_rounded,
-            color: textLight.withOpacity(0.7),
-            size: 20,
-          ),
+    );
 
-          const SizedBox(width: 8),
+    if (!context.mounted || message == null || message.isEmpty) {
+      return;
+    }
 
-          Text(
-            'Search circles...',
-            style: GoogleFonts.inter(
-              color: textLight.withOpacity(0.7),
-              fontSize: 13,
-            ),
-          ),
-        ],
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _leaveCircle(BuildContext context) async {
+    final session = context.read<SessionController>();
+
+    try {
+      final message = await session.leaveCircle();
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } on ApiException catch (e) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    }
+  }
+
+  void _showCreateUnavailable(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Create circle belum tersedia di backend.'),
       ),
     );
   }
@@ -149,6 +176,90 @@ class CircleScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildCurrentCircleState({
+    required BuildContext context,
+    required CircleSummary currentCircle,
+    required Color lightCream,
+    required Color textLight,
+  }) {
+    final session = context.watch<SessionController>();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: lightCream,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              currentCircle.displayName,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF2D2318),
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Invite code: ${currentCircle.referalCode}',
+              style: GoogleFonts.inter(
+                color: textLight,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              currentCircle.isOwnedBy(session.currentUser?.id)
+                  ? 'This is your default circle.'
+                  : "You are currently active in another member's circle.",
+              style: GoogleFonts.inter(
+                color: textLight,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (session.canLeaveCurrentCircle) ...[
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: session.isUpdatingCircle
+                      ? null
+                      : () => _leaveCircle(context),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: Color(0xFF5B4D41),
+                      width: 1.2,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    session.isUpdatingCircle
+                        ? 'Leaving...'
+                        : 'Leave current circle',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF5B4D41),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _dashedCircle(double size) {
     return SizedBox(
       width: size,
@@ -164,6 +275,7 @@ class CircleScreen extends StatelessWidget {
   Widget _buildActionButtons({
     required BuildContext context,
     required Color darkBrown,
+    required SessionController session,
   }) {
     return Column(
       children: [
@@ -171,14 +283,7 @@ class CircleScreen extends StatelessWidget {
           width: double.infinity,
           height: 54,
           child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const CreateCircleScreen(),
-                ),
-              );
-            },
+            onPressed: () => _showCreateUnavailable(context),
             icon: const Icon(
               Icons.add,
               size: 18,
@@ -205,37 +310,32 @@ class CircleScreen extends StatelessWidget {
         const SizedBox(height: 12),
 
         SizedBox(
-        width: double.infinity,
-        height: 54,
-        child: OutlinedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-              builder: (_) => const JoinCircleScreen(),
+          width: double.infinity,
+          height: 54,
+          child: OutlinedButton(
+            onPressed: session.isUpdatingCircle
+                ? null
+                : () => _openJoinCircle(context),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                color: darkBrown,
+                width: 1.2,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              backgroundColor: Colors.transparent,
+            ),
+            child: Text(
+              'Join with invite code',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: darkBrown,
+              ),
+            ),
+          ),
         ),
-      );
-    },
-    style: OutlinedButton.styleFrom(
-      side: BorderSide(
-        color: darkBrown,
-        width: 1.2,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      backgroundColor: Colors.transparent,
-    ),
-    child: Text(
-      'Join with invite code',
-      style: GoogleFonts.inter(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: darkBrown,
-      ),
-    ),
-  ),
-),
       ],
     );
   }

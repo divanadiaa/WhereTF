@@ -1,10 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/custom_widgets.dart';
+import '../../state/session_controller.dart';
+import '../main/main_navigation_screen.dart';
 import 'welcome_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -18,14 +19,30 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-
-    Timer(const Duration(seconds: 3), () {
-      if (!mounted) return;
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bootstrapSession();
     });
+  }
+
+  Future<void> _bootstrapSession() async {
+    await Future<void>.delayed(const Duration(seconds: 1));
+
+    if (!mounted) {
+      return;
+    }
+
+    final session = context.read<SessionController>();
+    final isLoggedIn = await session.bootstrap();
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) =>
+            isLoggedIn ? const MainNavigationScreen() : const WelcomeScreen(),
+      ),
+    );
   }
 
   @override

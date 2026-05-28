@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
+import '../../state/session_controller.dart';
 import '../premium/premium_screen.dart';
 
 class LocationHistoryScreen extends StatefulWidget {
@@ -16,12 +18,14 @@ class _LocationHistoryScreenState extends State<LocationHistoryScreen> {
   final Color cardCream = const Color(0xFFF5EEE6);
   final Color textLight = const Color(0xFF9E8E78);
 
-  final bool isPremium = false;
-
   int selectedDateIndex = 6;
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    final currentCircle = session.currentCircle;
+    final isPremium = session.isPremium;
+
     return Scaffold(
       backgroundColor: bgCream,
       appBar: AppBar(
@@ -39,7 +43,7 @@ class _LocationHistoryScreenState extends State<LocationHistoryScreen> {
               ),
             ),
             Text(
-              'No active circle',
+              currentCircle?.displayName ?? 'No active circle',
               style: GoogleFonts.inter(
                 color: textLight,
                 fontSize: 11,
@@ -57,9 +61,9 @@ class _LocationHistoryScreenState extends State<LocationHistoryScreen> {
             const SizedBox(height: 18),
             _buildDateSelector(),
             const SizedBox(height: 18),
-            _buildMapPreview(),
+            _buildMapPreview(isPremium),
             const SizedBox(height: 18),
-            _buildEmptyHistory(),
+            _buildEmptyHistory(isPremium),
           ],
         ),
       ),
@@ -129,7 +133,7 @@ class _LocationHistoryScreenState extends State<LocationHistoryScreen> {
               ),
             ),
             child: Text(
-              'Upgrade — Rp19.900/mo',
+              'Upgrade Rp19.900/mo',
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
@@ -214,7 +218,7 @@ class _LocationHistoryScreenState extends State<LocationHistoryScreen> {
     );
   }
 
-  Widget _buildMapPreview() {
+  Widget _buildMapPreview(bool isPremium) {
     return Container(
       width: double.infinity,
       height: 145,
@@ -247,7 +251,7 @@ class _LocationHistoryScreenState extends State<LocationHistoryScreen> {
     );
   }
 
-  Widget _buildEmptyHistory() {
+  Widget _buildEmptyHistory(bool isPremium) {
     return Container(
       width: double.infinity,
       height: 160,
