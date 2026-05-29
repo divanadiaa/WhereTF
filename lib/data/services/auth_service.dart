@@ -1,3 +1,5 @@
+import 'package:image_picker/image_picker.dart';
+
 import '../models/app_user.dart';
 import 'api_client.dart';
 import 'auth_storage.dart';
@@ -53,6 +55,31 @@ class AuthService {
     );
 
     final user = AppUser.fromJson(_extractUserMap(response));
+    await _authStorage.saveUser(user);
+    return user;
+  }
+
+  Future<AppUser> uploadProfilePhoto(XFile photo) async {
+    final response = await _apiClient.postMultipartFile(
+      '/user/photo',
+      fieldName: 'photo',
+      file: photo,
+      requiresAuth: true,
+    );
+
+    final userMap = Map<String, dynamic>.from(_extractUserMap(response));
+    final data = response['data'];
+    final nestedPhotoUrl =
+        data is Map<String, dynamic> ? data['photo_url'] : null;
+    final photoUrl = (response['photo_url'] ?? nestedPhotoUrl)?.toString();
+    if (photoUrl != null && photoUrl.trim().isNotEmpty) {
+      userMap['photo_url'] = photoUrl;
+    }
+
+    final cachedUser = await _authStorage.readUser();
+    userMap['phone'] ??= cachedUser?.phone;
+
+    final user = AppUser.fromJson(userMap);
     await _authStorage.saveUser(user);
     return user;
   }

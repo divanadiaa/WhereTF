@@ -1,3 +1,4 @@
+import '../models/circle_member.dart';
 import '../models/circle_summary.dart';
 import 'api_client.dart';
 
@@ -37,6 +38,54 @@ class CircleService {
     );
 
     return _parseResult(response);
+  }
+
+  Future<List<CircleMember>> getCircleMembers(int circleId) async {
+    final response = await _apiClient.get(
+      '/circles/$circleId/members',
+      requiresAuth: true,
+    );
+
+    final rawMembers = _extractMembersList(response['data']) ??
+        _extractMembersList(response['members']) ??
+        _extractMembersList(response);
+    if (rawMembers is! List) {
+      throw ApiException('Response members tidak valid.');
+    }
+
+    return rawMembers
+        .whereType<Map>()
+        .map(
+          (item) => CircleMember.fromJson(
+            item.map(
+              (key, value) => MapEntry(key.toString(), value),
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  List<dynamic>? _extractMembersList(dynamic value) {
+    if (value is List) {
+      return value;
+    }
+
+    final map = _asMap(value);
+    if (map == null) {
+      return null;
+    }
+
+    final members = map['members'];
+    if (members is List) {
+      return members;
+    }
+
+    final nestedData = map['data'];
+    if (nestedData is List) {
+      return nestedData;
+    }
+
+    return null;
   }
 
   CircleActionResult _parseResult(Map<String, dynamic> response) {

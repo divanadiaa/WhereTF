@@ -449,39 +449,6 @@ class _AuthScreenState extends State<AuthScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  _showMessage(
-                                    'Apple Sign In belum diintegrasikan.',
-                                  );
-                                },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: const BorderSide(color: primaryLight),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            backgroundColor: Colors.white,
-                          ),
-                          icon: const Icon(
-                            Icons.apple,
-                            color: textDark,
-                            size: 28,
-                          ),
-                          label: Text(
-                            'Apple',
-                            style: _font(
-                              size: 14,
-                              weight: FontWeight.w700,
-                              color: textDark,
-                            ),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
 

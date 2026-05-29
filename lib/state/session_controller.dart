@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../data/models/app_user.dart';
+import '../data/models/circle_member.dart';
 import '../data/models/circle_summary.dart';
 import '../data/models/subscription_status.dart';
 import '../data/services/api_client.dart';
@@ -27,20 +29,28 @@ class SessionController extends ChangeNotifier {
 
   AppUser? _currentUser;
   CircleSummary? _currentCircle;
+  List<CircleMember> _circleMembers = const <CircleMember>[];
   SubscriptionStatus? _subscription;
   List<SubscriptionPayment> _subscriptionPayments =
       const <SubscriptionPayment>[];
   bool _isBootstrapping = false;
   bool _isAuthenticating = false;
   bool _isUpdatingCircle = false;
+  bool _isLoadingCircleMembers = false;
   bool _isLoadingSubscription = false;
   bool _isUpgradingSubscription = false;
   bool _isCancellingPayment = false;
   bool _isCancellingSubscription = false;
+  bool _isUploadingProfilePhoto = false;
+  bool _hasLoadedCircleMembers = false;
+  String? _circleMembersError;
   String? _subscriptionError;
+  String? _profilePhotoError;
+  int? _circleMembersCircleId;
 
   AppUser? get currentUser => _currentUser;
   CircleSummary? get currentCircle => _currentCircle;
+  List<CircleMember> get circleMembers => List.unmodifiable(_circleMembers);
   SubscriptionStatus? get subscription => _subscription;
   List<SubscriptionPayment> get subscriptionPayments =>
       List.unmodifiable(_subscriptionPayments);
@@ -48,16 +58,24 @@ class SessionController extends ChangeNotifier {
   bool get isBootstrapping => _isBootstrapping;
   bool get isAuthenticating => _isAuthenticating;
   bool get isUpdatingCircle => _isUpdatingCircle;
+  bool get isLoadingCircleMembers => _isLoadingCircleMembers;
   bool get isLoadingSubscription => _isLoadingSubscription;
   bool get isUpgradingSubscription => _isUpgradingSubscription;
   bool get isCancellingPayment => _isCancellingPayment;
   bool get isCancellingSubscription => _isCancellingSubscription;
+  bool get isUploadingProfilePhoto => _isUploadingProfilePhoto;
+  String? get circleMembersError => _circleMembersError;
   String? get subscriptionError => _subscriptionError;
+  String? get profilePhotoError => _profilePhotoError;
   bool get isPremium => _subscription?.isPremium ?? false;
   bool get canLeaveCurrentCircle =>
       _currentCircle != null &&
       _currentUser != null &&
       !_currentCircle!.isOwnedBy(_currentUser!.id);
+  bool get hasCircleMembersForCurrentCircle =>
+      _currentCircle != null &&
+      _circleMembersCircleId == _currentCircle!.id &&
+      _hasLoadedCircleMembers;
 
   Future<bool> bootstrap() async {
     if (_isBootstrapping) {
@@ -78,14 +96,13 @@ class SessionController extends ChangeNotifier {
 
       final hasToken = await _authService.isLoggedIn();
       if (!hasToken) {
-        _currentUser = null;
-        _currentCircle = null;
-        _clearSubscriptionState();
+        _clearSessionState();
         return false;
       }
 
       final user = await _authService.getCurrentUser();
       _currentUser = user;
+      await refreshCircleMembers(allowFailure: true);
       await refreshSubscription(allowFailure: true);
       return true;
     } on UnauthorizedException {
@@ -93,8 +110,7 @@ class SessionController extends ChangeNotifier {
       _clearSessionState();
       return false;
     } on ApiException {
-      _currentUser = null;
-      _clearSubscriptionState();
+      _clearSessionState();
       return false;
     } finally {
       _isBootstrapping = false;
@@ -109,6 +125,7 @@ class SessionController extends ChangeNotifier {
     try {
       final user = await _authService.login(email, password);
       _currentUser = user;
+      _clearCircleMembersState();
       await refreshSubscription(allowFailure: true);
       notifyListeners();
     } finally {
@@ -136,6 +153,7 @@ class SessionController extends ChangeNotifier {
         phone,
       );
       _currentUser = user;
+      _clearCircleMembersState();
       await refreshSubscription(allowFailure: true);
       notifyListeners();
     } finally {
@@ -175,8 +193,12 @@ class SessionController extends ChangeNotifier {
       final result = await _circleService.joinCircle(referalCode);
       _currentCircle = result.circle;
       await _authStorage.saveCurrentCircle(result.circle);
+      await refreshCircleMembers(allowFailure: true);
       notifyListeners();
       return result.message;
+    } on UnauthorizedException {
+      await _handleUnauthorized();
+      rethrow;
     } finally {
       _isUpdatingCircle = false;
       notifyListeners();
@@ -195,8 +217,12 @@ class SessionController extends ChangeNotifier {
       final result = await _circleService.leaveCircle();
       _currentCircle = result.circle;
       await _authStorage.saveCurrentCircle(result.circle);
+      await refreshCircleMembers(allowFailure: true);
       notifyListeners();
       return result.message;
+    } on UnauthorizedException {
+      await _handleUnauthorized();
+      rethrow;
     } finally {
       _isUpdatingCircle = false;
       notifyListeners();
@@ -226,6 +252,87 @@ class SessionController extends ChangeNotifier {
       }
     } finally {
       _isLoadingSubscription = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshCircleMembers({bool allowFailure = false}) async {
+    final circle = _currentCircle;
+    if (circle == null) {
+      _clearCircleMembersState();
+      notifyListeners();
+      return;
+    }
+
+    if (_isLoadingCircleMembers) {
+      return;
+    }
+
+    final isNewCircle = _circleMembersCircleId != circle.id;
+    _isLoadingCircleMembers = true;
+    _hasLoadedCircleMembers = false;
+    _circleMembersError = null;
+    _circleMembersCircleId = circle.id;
+    if (isNewCircle) {
+      _circleMembers = const <CircleMember>[];
+    }
+    notifyListeners();
+
+    try {
+      final members = await _circleService.getCircleMembers(circle.id);
+      if (_currentCircle?.id == circle.id) {
+        _circleMembers = members;
+        _circleMembersCircleId = circle.id;
+        _hasLoadedCircleMembers = true;
+      }
+    } on UnauthorizedException {
+      await _handleUnauthorized();
+      if (!allowFailure) {
+        rethrow;
+      }
+    } on ApiException catch (e) {
+      if (_currentCircle?.id == circle.id) {
+        _circleMembers = const <CircleMember>[];
+        _circleMembersError = e.message;
+        _circleMembersCircleId = circle.id;
+        _hasLoadedCircleMembers = true;
+      }
+
+      if (!allowFailure) {
+        rethrow;
+      }
+    } finally {
+      _isLoadingCircleMembers = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> uploadProfilePhoto(XFile photo) async {
+    if (_isUploadingProfilePhoto) {
+      return;
+    }
+
+    _isUploadingProfilePhoto = true;
+    _profilePhotoError = null;
+    notifyListeners();
+
+    try {
+      final updatedUser = await _authService.uploadProfilePhoto(photo);
+      _currentUser = updatedUser;
+      _circleMembers = [
+        for (final member in _circleMembers)
+          member.userId == updatedUser.id
+              ? member.copyWith(user: updatedUser)
+              : member,
+      ];
+    } on UnauthorizedException {
+      await _handleUnauthorized();
+      rethrow;
+    } on ApiException catch (e) {
+      _profilePhotoError = e.message;
+      rethrow;
+    } finally {
+      _isUploadingProfilePhoto = false;
       notifyListeners();
     }
   }
@@ -329,7 +436,18 @@ class SessionController extends ChangeNotifier {
   void _clearSessionState() {
     _currentUser = null;
     _currentCircle = null;
+    _profilePhotoError = null;
+    _isUploadingProfilePhoto = false;
+    _clearCircleMembersState();
     _clearSubscriptionState();
+  }
+
+  void _clearCircleMembersState() {
+    _circleMembers = const <CircleMember>[];
+    _circleMembersError = null;
+    _circleMembersCircleId = null;
+    _isLoadingCircleMembers = false;
+    _hasLoadedCircleMembers = false;
   }
 
   void _clearSubscriptionState() {

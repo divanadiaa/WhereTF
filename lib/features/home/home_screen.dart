@@ -4,9 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/widgets/user_avatar.dart';
+import '../../data/models/circle_member.dart';
 import '../../data/models/circle_summary.dart';
 import '../../state/session_controller.dart';
 import '../circle/join_circle_screen.dart';
+import '../profile/profile_screen.dart';
+import 'member_today_history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final MapController _mapController = MapController();
+  int? _lastRequestedCircleId;
 
   final Color darkBrown = const Color(0xFF5B4D41);
   final Color lightCream = const Color(0xFFF7F2EB);
@@ -54,6 +59,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
     final currentCircle = session.currentCircle;
+
+    _requestMembersIfNeeded(session);
 
     return Scaffold(
       backgroundColor: backgroundCream,
@@ -127,13 +134,51 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? _buildEmptyCircleCard()
                         : _buildCurrentCircleCard(currentCircle),
                     const SizedBox(height: 22),
-                    _buildActiveCircleSection(currentCircle),
+                    _buildPeopleSection(session),
                   ],
                 ),
               );
             },
           ),
         ],
+      ),
+    );
+  }
+
+  void _requestMembersIfNeeded(SessionController session) {
+    final circleId = session.currentCircle?.id;
+    if (circleId == null) {
+      _lastRequestedCircleId = null;
+      return;
+    }
+
+    if (session.isLoadingCircleMembers ||
+        session.hasCircleMembersForCurrentCircle) {
+      _lastRequestedCircleId = circleId;
+      return;
+    }
+
+    if (_lastRequestedCircleId == circleId) {
+      return;
+    }
+
+    _lastRequestedCircleId = circleId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      context
+          .read<SessionController>()
+          .refreshCircleMembers(allowFailure: true);
+    });
+  }
+
+  void _openMemberHistory(CircleMember member) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MemberTodayHistoryScreen(member: member),
       ),
     );
   }
@@ -180,16 +225,24 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 22,
           ),
           const SizedBox(width: 14),
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: const Color(0xFFCDA87C),
-            child: Text(
-              user?.initials ?? '?',
-              style: GoogleFonts.inter(
-                color: darkBrown,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ProfileScreen(
+                    showBackButton: true,
+                  ),
+                ),
+              );
+            },
+            child: UserAvatar(
+              user: user,
+              radius: 17,
+              backgroundColor: const Color(0xFFCDA87C),
+              foregroundColor: darkBrown,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -408,22 +461,47 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildActiveCircleSection(CircleSummary? currentCircle) {
+  Widget _buildPeopleSection(SessionController session) {
+    final currentCircle = session.currentCircle;
+    final members = session.circleMembers;
+    final error = session.circleMembersError;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Active Circle',
-          style: GoogleFonts.inter(
-            color: darkBrown,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Orang-orang',
+                style: GoogleFonts.inter(
+                  color: darkBrown,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (currentCircle != null)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: session.isLoadingCircleMembers
+                    ? null
+                    : () => context
+                        .read<SessionController>()
+                        .refreshCircleMembers(allowFailure: true),
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  color: textLight,
+                  size: 20,
+                ),
+                tooltip: 'Refresh anggota',
+              ),
+          ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.symmetric(vertical: 4),
           decoration: BoxDecoration(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(14),
@@ -432,33 +510,95 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 1,
             ),
           ),
-          child: _buildActiveCircleContent(currentCircle),
+          child: currentCircle == null
+              ? _buildPeopleMessage('No synced circle yet')
+              : session.isLoadingCircleMembers && members.isEmpty
+                      ? _buildPeopleLoading()
+                      : error != null
+                          ? _buildPeopleError(error)
+                          : members.isEmpty
+                              ? _buildPeopleMessage(
+                                  'Belum ada anggota di circle ini',
+                                )
+                          : Column(
+                              children: [
+                                for (int index = 0;
+                                    index < members.length;
+                                    index++) ...[
+                                  _buildMemberRow(members[index]),
+                                  if (index != members.length - 1)
+                                    const Divider(
+                                      height: 1,
+                                      indent: 74,
+                                      color: Color(0xFFE4D6C7),
+                                    ),
+                                ],
+                              ],
+                            ),
         ),
       ],
     );
   }
 
-  Widget _buildActiveCircleContent(CircleSummary? currentCircle) {
-    if (currentCircle == null) {
-      return SizedBox(
-        height: 50,
-        child: Center(
-          child: Text(
-            'No synced circle yet',
+  Widget _buildPeopleLoading() {
+    return SizedBox(
+      height: 72,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Memuat anggota...',
             style: GoogleFonts.inter(
-              color: const Color(0xFFC2B3A4),
+              color: textLight,
               fontSize: 13,
             ),
           ),
-        ),
-      );
-    }
+        ],
+      ),
+    );
+  }
 
+  Widget _buildPeopleError(String message) {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tidak bisa memuat anggota',
+            style: GoogleFonts.inter(
+              color: darkBrown,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            style: GoogleFonts.inter(
+              color: textLight,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeopleMessage(String message) {
     return SizedBox(
-      height: 50,
+      height: 62,
       child: Center(
         child: Text(
-          '${currentCircle.displayName} - ${currentCircle.referalCode}',
+          message,
+          textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             color: const Color(0xFFC2B3A4),
             fontSize: 13,
@@ -466,5 +606,74 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildMemberRow(CircleMember member) {
+    return InkWell(
+      onTap: () => _openMemberHistory(member),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Row(
+          children: [
+            UserAvatar(
+              user: member.user,
+              initials: member.initials,
+              radius: 26,
+              backgroundColor: member.hasOwnerRole
+                  ? const Color(0xFFD8B36A)
+                  : const Color(0xFF8FC7D4),
+              foregroundColor: darkBrown,
+              fontSize: 18,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    member.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: darkBrown,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _memberSubtitle(member),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: textLight,
+                      fontSize: 13,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: textLight,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _memberSubtitle(CircleMember member) {
+    final status = member.displayStatus;
+    final contact = member.contactLabel;
+    if (contact != null && contact.isNotEmpty) {
+      return '$status - $contact';
+    }
+
+    return status;
   }
 }

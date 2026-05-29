@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/services/api_client.dart';
 import '../../state/session_controller.dart';
+import '../landing/welcome_screen.dart';
 
 class JoinCircleScreen extends StatefulWidget {
   const JoinCircleScreen({super.key});
@@ -75,11 +76,27 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
       }
 
       Navigator.pop(context, message);
+    } on UnauthorizedException {
+      _redirectToLogin();
     } on ApiValidationException catch (e) {
       _showMessage(e.message);
     } on ApiException catch (e) {
       _showMessage(e.message);
     }
+  }
+
+  void _redirectToLogin() {
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const WelcomeScreen(),
+      ),
+      (route) => false,
+    );
   }
 
   void _showMessage(String message) {
