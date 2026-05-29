@@ -14,7 +14,7 @@ class WhereTFApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => SessionController(),
       child: MaterialApp(
-        title: 'whereTF',
+        title: 'WhereToFind',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,

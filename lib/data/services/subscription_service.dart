@@ -1,3 +1,4 @@
+import '../../core/config/app_config.dart';
 import '../models/subscription_status.dart';
 import 'api_client.dart';
 
@@ -23,7 +24,10 @@ class SubscriptionService {
     if (returnUrl != null && returnUrl.isNotEmpty) {
       body['return_url'] = returnUrl;
       body['finish_url'] = returnUrl;
+      body['pending_url'] = returnUrl;
+      body['error_url'] = returnUrl;
     }
+    body['notification_url'] = AppConfig.paymentNotificationUrl;
 
     final response = await _apiClient.post(
       '/subscription/upgrade',

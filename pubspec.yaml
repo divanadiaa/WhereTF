@@ -1,5 +1,5 @@
 name: wheretf
-description: WhereThatFind location tracking app.
+description: WhereToFind private location sharing app.
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -27,6 +27,20 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/app_icon_square.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icons/app_icon_square.png"
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/icons/app_icon_square.png"
+    background_color: "#000000"
+    theme_color: "#000000"

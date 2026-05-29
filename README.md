@@ -1,6 +1,6 @@
-# wheretf
+# WhereToFind
 
-A new Flutter project.
+WhereToFind is a private location sharing app for trusted circles.
 
 ## Getting Started
 

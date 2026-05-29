@@ -77,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'WhereThatFind',
+                  'WhereToFind',
                   style: GoogleFonts.inter(
                     fontSize: 32,
                     fontWeight: FontWeight.w700,
@@ -86,7 +86,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Stay close, wherever you are',
+                  'Share live locations with your trusted circle',
                   style: GoogleFonts.inter(
                     fontSize: 16,
                     color: AppColors.textLight,

@@ -33,6 +33,11 @@ class AppConfig {
     return '';
   }
 
+  static String get paymentNotificationUrl {
+    final normalizedBaseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), '');
+    return '$normalizedBaseUrl/midtrans/notification';
+  }
+
   static String get midtransSnapBaseUrl {
     if (isMidtransProduction) {
       return 'https://app.midtrans.com/snap/v2/vtweb';
